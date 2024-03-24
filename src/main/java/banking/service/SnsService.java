@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.sns.model.PublishBatchRequestEntry;
 import software.amazon.awssdk.services.sns.model.PublishBatchResponse;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -25,20 +26,24 @@ import java.util.concurrent.LinkedBlockingQueue;
 @Service
 public class SnsService implements ISnsService {
     private static final int SNS_BATCH_SIZE = 10;
-    private static Logger logger = LogManager.getLogger(AccountService.class);
+    private static final Logger logger = LogManager.getLogger(AccountService.class);
     private final SnsAsyncClient snsClient;
     // Move AWS config to an external source for easier testing and improved portability.
-    private final IAwsConfigProvider arnProvider;
+    private final IAwsConfigProvider awsConfigProvider;
     private final ObjectMapper objectMapper;
     private final LinkedBlockingQueue<PublishBatchRequestEntry> messageQueue;
 
-    public SnsService(@Autowired ISnsClientAdapter clientAdapter, @Autowired IAwsConfigProvider arnProvider, @Autowired AwsCredentialsProvider credentialsProvider) {
-        this.arnProvider = arnProvider;
+    public SnsService(@Autowired ISnsClientAdapter clientAdapter, @Autowired IAwsConfigProvider awsConfigProvider, @Autowired AwsCredentialsProvider credentialsProvider) {
+        this.awsConfigProvider = awsConfigProvider;
         // Prevent a bottleneck from forming around SNS calls by making them async.
+        // Also set timeouts on SNS client as per:
+        // https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/best-practices.html#bestpractice5
         this.snsClient = SnsAsyncClient.builder()
                 .httpClient(clientAdapter.getClient())
-                .region(this.arnProvider.region())
+                .region(this.awsConfigProvider.region())
                 .credentialsProvider(credentialsProvider)
+                .overrideConfiguration(b -> b.apiCallTimeout(Duration.ofSeconds(awsConfigProvider.apiCallTimeout()))
+                        .apiCallAttemptTimeout(Duration.ofSeconds(awsConfigProvider.apiCallAttemptTimeout())))
                 .build();
         this.objectMapper = new ObjectMapper();
         this.messageQueue = new LinkedBlockingQueue<PublishBatchRequestEntry>(100);
@@ -73,7 +78,7 @@ public class SnsService implements ISnsService {
             messageQueue.drainTo(drained, SNS_BATCH_SIZE);
             PublishBatchRequest publishRequest = PublishBatchRequest.builder()
                     .publishBatchRequestEntries(drained)
-                    .topicArn(this.arnProvider.arn())
+                    .topicArn(this.awsConfigProvider.arn())
                     .build();
             CompletableFuture<PublishBatchResponse> publishResponse = snsClient.publishBatch(publishRequest);
             publishResponse.thenAccept(response -> logger.debug(new StringMapMessage().

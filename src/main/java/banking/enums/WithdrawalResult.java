@@ -18,4 +18,19 @@ public enum WithdrawalResult {
     public String toString() {
         return this.description;
     }
+
+    public boolean isClientError() {
+        return switch (this) {
+            case ERR_NEGATIVE_AMOUNT, ERR_ZERO_AMOUNT, ERR_INSUFFICIENT_FUNDS, ERR_UNKNOWN_ACCOUNT -> true;
+            default -> false;
+        };
+    }
+
+    public boolean isServerError() {
+        return this.equals(ERR_UNKNOWN);
+    }
+
+    public boolean isSuccess() {
+        return this.equals(SUCCESS);
+    }
 }

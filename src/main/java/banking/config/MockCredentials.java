@@ -14,7 +14,7 @@ public class MockCredentials implements AwsCredentialsProvider {
     private final String accessKeyId;
     private final String secretAccessKey;
 
-    public MockCredentials(@Value("aws.accessKeyId") String accessKeyId, @Value("aws.secretAccessKey") String secretAccessKey) {
+    public MockCredentials(@Value("${aws.accessKeyId}") String accessKeyId, @Value("${aws.secretAccessKey}") String secretAccessKey) {
         this.accessKeyId = accessKeyId;
         this.secretAccessKey = secretAccessKey;
     }
