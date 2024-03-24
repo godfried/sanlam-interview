@@ -1,89 +1,52 @@
-package me.jordaan;
+package banking.controller;
 
+import banking.config.IAwsConfigProvider;
+import banking.enums.WithdrawalResult;
+import banking.service.IAccountService;
+import banking.service.ISnsService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.StringMapMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.sns.SnsClient;
-import software.amazon.awssdk.services.sns.model.PublishRequest;
-import software.amazon.awssdk.services.sns.model.PublishResponse;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 
 import java.math.BigDecimal;
-import java.util.NoSuchElementException;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/bank")
 public class BankAccountController {
-    //@Autowired
-    //private JdbcTemplate jdbcTemplate;
+    private static Logger logger = LogManager.getLogger(BankAccountController.class);
+    private final ISnsService snsService;
+    private final IAccountService accountService;
 
-
-    @Autowired
-    AccountRepository accountRepository;
-
-    private SnsClient snsClient;
-    public BankAccountController() {
-        this.snsClient = SnsClient.builder()
-                .region(Region.AF_SOUTH_1) // Specify your region
-                .build();
+    public BankAccountController(@Autowired IAccountService accountService, @Autowired ISnsService snsService, @Autowired AwsCredentialsProvider credentialsProvider, @Autowired IAwsConfigProvider arnProvider) {
+        this.accountService = accountService;
+        this.snsService = snsService;
     }
+
     @PostMapping("/withdraw")
     public String withdraw(@RequestParam("accountId") Long accountId,
                            @RequestParam("amount") BigDecimal amount) {
-// Check current balance
-        //String sql = "SELECT balance FROM accounts WHERE id = ?";
-        //BigDecimal currentBalance = jdbcTemplate.queryForObject(
-        //        sql, new Object[]{accountId}, BigDecimal.class);
-        Optional<Account> queriedAccount = accountRepository.findById(accountId);
-        if (queriedAccount.isEmpty()) {
-            return "No such account";
+        WithdrawalResult result = accountService.withdraw(accountId, amount);
+        logger.debug(new StringMapMessage().with("context", "withdrawal request received").with("accountId", accountId).with("amount", amount.toString()));
+        if (result.equals(WithdrawalResult.SUCCESS)) {
+            snsService.publishWithdrawal(accountId, amount);
         }
-        Account account = queriedAccount.get();
-        BigDecimal currentBalance = account.getBalance();
-        if (currentBalance != null && currentBalance.compareTo(amount) >= 0) {
-// Update balance
-            account.withDraw(amount);
-            accountRepository.save(account);
-            // sql = "UPDATE accounts SET balance = balance - ? WHERE id = ?";
-            // int rowsAffected = jdbcTemplate.update(sql, amount, accountId);
-            //if (rowsAffected > 0) {
-            publishWithdrawal(accountId, amount);
-            return "Withdrawal successful";
-            //} else {
-// In case the update fails for reasons other than a balance check
-            //    return "Withdrawal failed";
-            //}
-        } else {
-// Insufficient funds
-            return "Insufficient funds for withdrawal";
-        }
-
+        logger.debug(new StringMapMessage().with("context", "withdrawal request completed").with("result", result).with("accountId", accountId).with("amount", amount.toString()));
+        return result.toString();
     }
 
+
+    // Just for testing
     @PostMapping("/add")
-    public Long add(@RequestParam("balance") BigDecimal balance){
-        Account account = new Account(balance);
-        Account saved = accountRepository.saveAndFlush(account);
-        return saved.getId();
-    }
-    @GetMapping("/balance")
-    public BigDecimal balance(@RequestParam("accountId") Long accountId){
-        Optional<Account> queriedAccount = accountRepository.findById(accountId);
-        if (queriedAccount.isEmpty()) {
-            throw new NoSuchElementException(String.format("No account with ID %d", accountId));
-        }
-        return queriedAccount.get().getBalance();
+    public Long add(@RequestParam("balance") BigDecimal balance) {
+        return accountService.add(balance);
     }
 
-    public void publishWithdrawal(Long accountId, BigDecimal amount){
-        // After a successful withdrawal, publish a withdrawal event to SNS
-        WithdrawalEvent event = new WithdrawalEvent(amount, accountId, "SUCCESSFUL");
-        String eventJson = event.toJson(); // Convert event to JSON
-        String snsTopicArn = "arn:aws:sns:YOUR_REGION:YOUR_ACCOUNT_ID:YOUR_TOPIC_NAME";
-        PublishRequest publishRequest = PublishRequest.builder()
-                .message(eventJson)
-                .topicArn(snsTopicArn)
-                .build();
-        PublishResponse publishResponse = snsClient.publish(publishRequest);
+    // Just for testing
+    @GetMapping("/balance")
+    public BigDecimal balance(@RequestParam("accountId") Long accountId) {
+        return accountService.balance(accountId);
     }
 }

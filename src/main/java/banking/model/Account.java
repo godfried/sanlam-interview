@@ -1,4 +1,4 @@
-package me.jordaan;
+package banking.model;
 
 
 import jakarta.persistence.*;
