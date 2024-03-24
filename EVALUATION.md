@@ -3,10 +3,7 @@
 ## Implemented Changes
 
 These are a list of changes that have been implemented to some degree within the project.
-The changes chosen were either those that would provide immediate benefit to developers by:
-
-1. Making the codebase easier to develop, maintain and test.
-
+The changes chosen were either those that would provide immediate benefit to developers by making the codebase easier to develop, maintain, and test; or easy improvements to potential future pitfalls.
 Other improvements were considered but not implemented due to time constraints. See the section *Unimplemented Changes*.
 
 ### Usability & Correctness
